@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { HashRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
 import { INITIAL_METRICS, INITIAL_QUARTERS, ICONS } from './constants';
-import { GoalStatus, Metric, DailyLog, WeeklyPriority, Quarter } from './types';
+import { GoalStatus, Metric, DailyLog, WeeklyPriority, Quarter, RevenueLog } from './types';
 
 // Views
 import YearlyCommand from './views/YearlyCommand';
@@ -11,18 +11,23 @@ import WeeklyOperating from './views/WeeklyOperating';
 import DailyTracker from './views/DailyTracker';
 import DrillDown from './views/DrillDown';
 import DriftDetector from './views/DriftDetector';
+import Login from './views/Login';
 
 const App: React.FC = () => {
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
+    return localStorage.getItem('linef_authenticated') === 'true';
+  });
+
   const [metrics, setMetrics] = useState<Metric[]>(() => {
     const saved = localStorage.getItem('linef_metrics');
     return saved ? JSON.parse(saved) : INITIAL_METRICS;
   });
-  
+
   const [dailyLogs, setDailyLogs] = useState<DailyLog[]>(() => {
     const saved = localStorage.getItem('linef_daily_logs');
     return saved ? JSON.parse(saved) : [];
   });
-  
+
   const [weeklyPriorities, setWeeklyPriorities] = useState<WeeklyPriority[]>(() => {
     const saved = localStorage.getItem('linef_weekly_priorities');
     return saved ? JSON.parse(saved) : [
@@ -35,6 +40,11 @@ const App: React.FC = () => {
   const [quarters, setQuarters] = useState<Quarter[]>(() => {
     const saved = localStorage.getItem('linef_quarters');
     return saved ? JSON.parse(saved) : INITIAL_QUARTERS;
+  });
+
+  const [revenueLogs, setRevenueLogs] = useState<RevenueLog[]>(() => {
+    const saved = localStorage.getItem('linef_revenue_logs');
+    return saved ? JSON.parse(saved) : [];
   });
 
   useEffect(() => {
@@ -53,6 +63,10 @@ const App: React.FC = () => {
     localStorage.setItem('linef_quarters', JSON.stringify(quarters));
   }, [quarters]);
 
+  useEffect(() => {
+    localStorage.setItem('linef_revenue_logs', JSON.stringify(revenueLogs));
+  }, [revenueLogs]);
+
   const updateMetric = (id: string, value: number) => {
     setMetrics(prev => prev.map(m => {
       if (m.id === id) {
@@ -69,16 +83,16 @@ const App: React.FC = () => {
       const p = m.current / m.target;
       return acc + (m.id === 'weight' ? (m.current <= m.target ? 1 : (20 - m.current) / (20 - m.target)) : Math.min(p, 1));
     }, 0) / metrics.length;
-    
+
     // 2. Weekly Consistency (25%)
-    const weeklyRate = weeklyPriorities.length > 0 
-      ? weeklyPriorities.filter(p => p.completed).length / weeklyPriorities.length 
+    const weeklyRate = weeklyPriorities.length > 0
+      ? weeklyPriorities.filter(p => p.completed).length / weeklyPriorities.length
       : 0;
 
     // 3. Daily Consistency (Last 7 Days) (25%)
     const recentLogs = dailyLogs.slice(0, 7);
-    const dailyConsistency = recentLogs.length > 0 
-      ? (recentLogs.filter(l => l.fitnessDone && l.deepWork >= 2).length / recentLogs.length) 
+    const dailyConsistency = recentLogs.length > 0
+      ? (recentLogs.filter(l => l.fitnessDone && l.deepWork >= 2).length / recentLogs.length)
       : 0;
 
     // 4. Quarterly Milestones (20%)
@@ -90,6 +104,15 @@ const App: React.FC = () => {
     const rawScore = (metricProgress * 0.3) + (weeklyRate * 0.25) + (dailyConsistency * 0.25) + (quarterlyRate * 0.2);
     return Math.min(Math.round(rawScore * 100), 100);
   }, [metrics, weeklyPriorities, dailyLogs, quarters]);
+
+  const handleLogout = () => {
+    localStorage.removeItem('linef_authenticated');
+    setIsAuthenticated(false);
+  };
+
+  if (!isAuthenticated) {
+    return <Login onAuthenticated={() => setIsAuthenticated(true)} />;
+  }
 
   return (
     <Router>
@@ -118,11 +141,17 @@ const App: React.FC = () => {
               <span className={`text-lg font-bold ${healthScore > 80 ? 'text-green-500' : healthScore > 40 ? 'text-yellow-500' : 'text-red-500'}`}>{healthScore}%</span>
             </div>
             <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
-              <div 
-                className={`h-full transition-all duration-700 ${healthScore > 80 ? 'bg-green-500 shadow-[0_0_10px_rgba(34,197,94,0.4)]' : healthScore > 40 ? 'bg-yellow-500' : 'bg-red-500'}`} 
+              <div
+                className={`h-full transition-all duration-700 ${healthScore > 80 ? 'bg-green-500 shadow-[0_0_10px_rgba(34,197,94,0.4)]' : healthScore > 40 ? 'bg-yellow-500' : 'bg-red-500'}`}
                 style={{ width: `${healthScore}%` }}
               />
             </div>
+            <button
+              onClick={handleLogout}
+              className="w-full mt-4 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 hover:border-red-500 text-red-400 font-bold py-2 rounded transition-all text-xs uppercase tracking-wider"
+            >
+              Logout
+            </button>
           </div>
         </aside>
 
@@ -132,7 +161,7 @@ const App: React.FC = () => {
             <Route path="/quarterly" element={<QuarterlyExecution quarters={quarters} setQuarters={setQuarters} />} />
             <Route path="/weekly" element={<WeeklyOperating priorities={weeklyPriorities} setPriorities={setWeeklyPriorities} />} />
             <Route path="/daily" element={<DailyTracker logs={dailyLogs} setLogs={setDailyLogs} />} />
-            <Route path="/drill/:goalId" element={<DrillDown metrics={metrics} updateMetric={updateMetric} />} />
+            <Route path="/drill/:goalId" element={<DrillDown metrics={metrics} updateMetric={updateMetric} revenueLogs={revenueLogs} setRevenueLogs={setRevenueLogs} />} />
             <Route path="/drift" element={<DriftDetector metrics={metrics} logs={dailyLogs} />} />
           </Routes>
         </main>
@@ -145,8 +174,8 @@ const SidebarLink: React.FC<{ to: string, label: string, icon: React.ReactNode }
   const location = useLocation();
   const isActive = location.pathname === to;
   return (
-    <Link 
-      to={to} 
+    <Link
+      to={to}
       className={`flex items-center space-x-3 px-3 py-2.5 rounded-lg transition-all duration-200 ${isActive ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/40' : 'hover:bg-slate-800 text-slate-400'}`}
     >
       {icon}

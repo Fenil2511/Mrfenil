@@ -48,9 +48,19 @@ export interface Quarter {
   isCompleted: boolean;
 }
 
+export interface RevenueLog {
+  id: string;
+  date: string; // ISO date string
+  amount: number;
+  source: string; // Description of revenue source
+  metricId: string; // Links to the metric (e.g., 'rev')
+  timestamp: number; // Unix timestamp for sorting
+}
+
 export interface DashboardState {
   metrics: Metric[];
   dailyLogs: DailyLog[];
   weeklyPriorities: WeeklyPriority[];
   quarters: Quarter[];
+  revenueLogs: RevenueLog[];
 }
